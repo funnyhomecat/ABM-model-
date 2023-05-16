@@ -1,0 +1,179 @@
+globals [
+  percent-similar  ;; on the average, what percent of a turtle's neighbors
+                   ;; are the same color as that turtle?
+  percent-unhappy  ;; what percent of the turtles are unhappy?
+           
+]
+
+turtles-own [
+  happy?          ;; for each turtle, indicates whether at least %-similar-wanted percent of
+                  ;; that turtle's neighbors are the same color as the turtle
+  similar-nearby  ;; how many neighboring patches have a turtle with my color?
+  total-nearby    ;; how many neighboring patches have a turtle?
+  migration-preference  ;; preference value for migration destination
+  memory          ;; Memory attribute to store previous migration decisions
+  apartment-score
+]
+
+patches-own [
+  rent-level  ;; Rent level
+  apartment-size  ;; Apartment size
+  distance-to-school  ;; Distance to school
+]
+
+to setup
+  clear-all
+  ;; create a turtle on NUMBER randomly selected patches.
+  ;; note that slider's maximum value is 2500 which is a little less than the total number of patches
+  ask n-of number patches [
+    sprout 1
+  ]
+  
+  ask turtles [
+    ;; make approximately half the turtles red and the other half green
+    set color one-of [ blue yellow ]
+
+    set migration-preference random-float 1.0 ;;Generate random preference value for each turtle (between 0.0 and 1.0)
+   set memory nobody  ;; Initialize memory as nobody
+  ]
+
+
+  create-apartments  ;; create student apartments
+  update-turtles
+  update-globals
+  reset-ticks
+end
+
+
+to create-apartments
+  ;; Create apartments and assign scores based on criteria
+  let potential-apartments [
+    [4000 25 1]
+    [5000 30 2]
+    [6000 28 3]
+    [5500 27 2]
+    [7000 35 1]
+  ]
+
+  ;; Assign scores to apartments based on individual preferences
+  ask turtles [
+    let max-rent 7000
+    let min-rent 4000
+    let max-apartment-size 35
+    let min-apartment-size 25
+    let max-proximity 3
+    let min-proximity 1
+
+    ;; Calculate scores for each potential apartment
+    let apartment-count length potential-apartments
+    let i 0
+    while [i < apartment-count] [
+      let rent item 0 item i potential-apartments
+      let unit-size item 1 item i potential-apartments
+      let proximity item 2 item i potential-apartments
+
+      ;; Calculate the score based on individual preferences
+      let apt-score (rent - min-rent) / (max-rent - min-rent)
+                     + (unit-size - min-apartment-size) / (max-apartment-size - min-apartment-size)
+                     + (max-proximity - proximity) / (max-proximity - min-proximity)
+
+      ;; Assign the total score to the apartment
+     set potential-apartments replace-item i potential-apartments (list rent unit-size proximity apt-score)
+
+      set i (i + 1)
+    ]
+  ]
+end
+
+
+
+to-report normalize-value [value min-value max-value]
+  ;; Normalize a value between 0 and 1
+  report (value - min-value) / (max-value - min-value)
+end
+
+
+to go
+  if (all? turtles [ happy? ] or ticks = 100) [ stop ]  ;; Add the condition for stopping the model
+  move-unhappy-turtles
+  update-turtles
+  update-globals
+  tick
+end
+
+
+to move-unhappy-turtles
+  ask turtles with [not happy?] [
+    find-new-spot
+    evaluate-potential-apartments
+    let selected-apartment select-best-apartment
+    if selected-apartment != nobody [
+      move-to selected-apartment  ;; Move to the selected best apartment
+      set memory patch-here  ;; Update memory with the current patch as the migration decision
+    ]
+  ]
+end
+
+
+to find-new-spot
+  rt random-float 360
+  fd random-float 10
+  if any? other turtles-here [
+    find-new-spot  ;; keep going until we find an unoccupied patch
+  ]
+  setxy pxcor pycor  ;; move to center of patch
+end
+
+
+to evaluate-potential-apartments
+  let potential-apartments patches with [
+    rent-level >= 4000 and rent-level <= 7000
+    and apartment-size >= 25 and apartment-size <= 30
+    and distance-to-school <= 10
+  ]
+  ask potential-apartments [
+    set pcolor white  ;; Potential apartments are shown in white color
+    ;; Calculate score based on individual's preference and attributes of potential apartments
+    let score migration-preference - (rent-level / 1000) + (30 - apartment-size) / 10 + (10 - distance-to-school)
+    set plabel score  ;; Display score on the apartment patch
+  ]
+end
+
+
+
+to-report select-best-apartment
+  let potential-apartments patches with [pcolor = white]
+  if any? potential-apartments [
+    let best-apartment max-one-of potential-apartments [plabel]
+    report best-apartment
+  ]
+  report nobody
+end
+
+to update-turtles
+  ask turtles [
+    ;; in the next two lines, we use "neighbors" to test the eight patches
+    ;; surrounding the current patch
+
+    ;; count the number of my neighbors that are the same color as me
+    set similar-nearby count (turtles-on neighbors) with [color = [color] of myself]
+
+    ;; count the total number of neighbors
+    set total-nearby count (turtles-on neighbors)
+
+    ;; I'm happy if there are at least the minimal number of same-colored neighbors
+    set happy? similar-nearby >= (%-similar-wanted * total-nearby / 100)
+  ]
+end
+
+to update-globals
+  let similar-neighbors sum [similar-nearby] of turtles
+  let total-neighbors sum [total-nearby] of turtles
+  set percent-similar (similar-neighbors / total-neighbors) * 100
+  set percent-unhappy (count turtles with [not happy?]) / count turtles * 100
+end
+
+
+
+; Copyright 2006 Uri Wilensky.
+; See Info tab for full copyright and license.
