@@ -52,7 +52,7 @@ end
 
 ; run the model for one tick
 to go
-  if all? turtles [ happy? ] [ stop ]
+  if all? turtles [ happy? ] or ticks = 100 [ stop ]
   move-unhappy-turtles
   update-turtles
   update-globals
